@@ -8,12 +8,16 @@
 #'        include file extension
 #' @param extraColors if TRUE, use cyan and blue for violation of min thresholds
 #'        instead of using the same colors as for max thresholds (yel and red)
+#' @param giveSummary print a summary of input data via ``showInputSummary()``
+#'        which allows spotting data inconsistencies
 #'
 #' @importFrom dplyr filter select mutate group_by %>% bind_rows
 #'
 #' @export
 validateScenarios <- function(dataPath, config,
-                              outputFile = NULL, extraColors = TRUE) {
+                              outputFile = NULL,
+                              extraColors = TRUE,
+                              giveSummary = FALSE) {
 
   data <- importScenarioData(dataPath)
 
@@ -27,9 +31,9 @@ validateScenarios <- function(dataPath, config,
     fillInf() %>%
     expandPeriods(scen) %>%
     expandVariables(scen)
+  cfg[cfg == "NA"] <- NA
 
-  # TODO: check if all variables from config are in scenario data,
-  # currently fails only with unit check
+  if (giveSummary) showInputSummary(scen, hist, cfg)
 
   # filter data for variables from config
   hist <- filter(hist, variable %in% unique(cfg$variable))
@@ -37,8 +41,6 @@ validateScenarios <- function(dataPath, config,
 
   # combine scenario data (and reference data if needed) with the respective
   # thresholds for each row of the config and bind all into one data.frame
-  # TODO: parallelization works but makes development harder, likely not needed
-  # future::plan(future::multisession, workers = parallel::detectCores())
   valiData <- bind_rows(
     lapply(1:nrow(cfg), function(i) {
       combineData(

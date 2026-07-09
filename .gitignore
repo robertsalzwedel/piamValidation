@@ -3,7 +3,10 @@
 *.RData
 *.Ruserdata
 *.html
+*.Rproj
 .Rproj.user
 inst/doc
 output
 data
+docs
+.positai

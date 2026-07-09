@@ -1,0 +1,163 @@
+---
+title: 'piamValidation publication: REMIND plots'
+date: "`r format(Sys.Date())`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    code_folding: hide
+    always_allow_html: true
+  pdf_document:
+    toc: true
+params:
+  mif: ''
+  cfg: ''
+  extraColors: true
+  warning: false
+  message: false
+  figWidth: 8
+---
+
+```{r include=FALSE}
+library(piamValidation)
+library(knitr)
+library(dplyr)
+library(ggplot2)
+library(ggthemes)
+library(plotly)
+
+knitr::opts_chunk$set(
+  echo = FALSE,
+  error = TRUE,
+  message = params$message,
+  warning = params$warning
+)
+```
+
+# REMIND Near-Term Realism
+
+## Import and Prepare Data
+
+Using scenario data from:
+
+```{r}
+cat("REMIND_generic_SSP2EU-NPi_2023-04-22.mif\n")
+cat("REMIND_generic_SSP2EU-PkBudg1150_2023-04-22.mif\n")
+cat("REMIND_generic_SSP2-NPi2025_2025-04-22.mif\n")
+cat("REMIND_generic_SSP2-PkBudg1000_2025-04-22.mif\n")
+```
+
+Using config:
+
+```{r}
+cat("validationConfig_publication.csv\n")
+```
+
+
+```{r, message = FALSE, warning = FALSE}
+# Validation
+data <- quitte::as.quitte(params$mif)
+hist <- filter(data, scenario == "historical")
+scen <- filter(data, scenario != "historical")
+
+df <- validateScenarios(data, params$cfg, extraColors = params$extraColors)
+df <- appendTooltips(df)
+```
+
+
+## Plots
+
+### EV Stocks and Sales
+
+```{r, fig.width=7, fig.height=5}
+# visualizations of EV Stock variable
+d <- df   %>% filter(variable == "Stock|Transport|Pass|Road|BEV")
+h <- hist %>% filter(model == "IEA GEVO Historical")
+
+# validation heat map as used in publication
+validationHeatmap(d,
+                  interactive = FALSE,
+                  x_plot = "region",
+                  x_facet = "scenario",
+                  y_plot = "period",
+                  y_facet = "model")
+
+# line plot for "World" region
+linePlotThresholds(filter(d, region == "World"), 
+                   scenData = scen, 
+                   refData = h, 
+                   interactive = FALSE) +
+    scale_shape_manual(values = 1)
+
+
+# visualizations of EV Sales variable
+d <- df   %>% filter(variable == "Sales|Transport|Pass|Road|BEV")
+h <- hist %>% filter(model == "IEA GEVO Historical")
+
+# validation heat map as used in publication
+validationHeatmap(d, 
+                  interactive = FALSE,
+                  x_plot = "region",
+                  x_facet = "scenario",
+                  y_plot = "period",
+                  y_facet = "model")
+
+# line plot for "World" region
+linePlotThresholds(filter(d, region == "World"), 
+                   scenData = filter(data, scenario != "historical"), 
+                   refData = h, 
+                   interactive = FALSE) +
+  scale_shape_manual(values = 1)
+```
+
+
+### Offshore Wind
+
+```{r}
+# visualizations of Offshore Wind capacity variable
+d <- df   %>% filter(variable == "Cap|Electricity|Wind|Offshore")
+h <- hist %>% filter(model == "IRENA")
+
+# validation heat map as used in publication
+validationHeatmap(d,
+                  interactive = FALSE,
+                  x_plot = "region",
+                  x_facet = "scenario",
+                  y_plot = "period",
+                  y_facet = "model")
+
+# line plot for "EUR" region
+linePlotThresholds(filter(d, region == "EUR"), 
+                   scenData = scen, 
+                   refData = h, 
+                   interactive = FALSE) +
+  scale_shape_manual(values = 2)
+```
+
+
+### CCS
+
+```{r, fig.width=7, fig.height=5}
+# visualizations of CCS variable
+d <- df   %>% filter(variable == "CO2|Transport and Storage")
+h <- hist %>% filter(model == "IEA CCUS")
+
+# validation heat map as used in publication
+validationHeatmap(d,
+                  interactive = FALSE,
+                  x_plot = "region",
+                  x_facet = "scenario",
+                  y_plot = "period",
+                  y_facet = "model")
+
+# line plot for "World" region
+linePlotThresholds(filter(d, region == "World"), 
+                   scenData = scen, 
+                   refData = h, 
+                   interactive = FALSE) +
+  scale_shape_manual(values = 15)
+```
+
+
+
+

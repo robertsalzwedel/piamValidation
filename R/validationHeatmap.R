@@ -1,6 +1,6 @@
 #' takes the output of "validateScenarios()" and plots heat maps per variable
 #'
-#' @param df data.frame to be plotted, as returned by ``validateScenarios()``
+#' @param valiData data to be plotted, as returned by ``validateScenarios()``
 #'        (and ``appendTooltips()`` if interactive), plus optional filtering.
 #'        Needs to have at least one dimension with only one unique element.
 #' @param main_dim out of the 5-dim df, 1 dim has to contain only on element,
@@ -14,28 +14,30 @@
 #'
 #' @importFrom dplyr filter select mutate %>%
 #' @import ggplot2
-#' @importFrom ggthemes theme_tufte
 #' @export
 
-validationHeatmap <- function(df,
+validationHeatmap <- function(valiData,
                               main_dim = "variable",
                               x_plot  = NULL, y_plot  = NULL,
                               x_facet = NULL, y_facet = NULL,
                               interactive = TRUE) {
 
-  # setup ####
+  if (nrow(valiData) == 0) stop("Empty data frame given to plot function.")
 
+  # setup ####
+  df <- valiData
   plot_title <- paste0(df[1, main_dim])
 
   # prepare data
   df$period <- as.character(df$period)
   standard_dims <- c("model", "scenario", "variable", "region", "period")
-  colors <- c(green     = "#008450",
-              yellow    = "#EFB700",
-              red       = "#B81D13",
-              cyan      = "#66ccee",
-              blue      = "#4477aa",
-              grey      = "#808080")
+
+  colors <-  c(green     = "#008450",
+               yellow    = "#EFBB0F",
+               red       = "#AA0014",
+               cyan      = "#7BD5F3",
+               blue      = "#4477AA",
+               grey      = "#808080")
 
   # check arguments ####
 
@@ -51,17 +53,6 @@ validationHeatmap <- function(df,
     print(lengths(lapply(df[, standard_dims], unique)))
     stop(main_dim, " (main_dim) can only contain one unique element,
   Please filter data before plotting or select a different main_dim.\n")
-  }
-
-  # check validation categories, only one per plot allowed
-  # TODO: ref_scenario is not checked, but important as "historical" signals a
-  # different type of check. Problem: how to deal with "regular" scenario
-  # comparison to multiple different scenarios
-  if (length(unique(df[, c("metric")])) > 1) {
-    cat("Validation types: \n")
-    print(unique(df[, c("metric")]))
-    stop("Multiple categories of checks found in data, please filter the data
-  object to contain only one metric.\n")
   }
 
   # check if an incomplete set of x/y_plot/facet arguments is passed
@@ -146,7 +137,8 @@ validationHeatmap <- function(df,
     scale_fill_manual(values = colors, breaks = colors) +
     facet_grid(.data[[y_facet, ]] ~ .data[[x_facet, ]]) +
     labs(x = NULL, y = NULL, title = plot_title) +
-    theme_tufte(base_family = "Arial") +
+    theme_minimal() +
+    theme(panel.grid.major = element_blank()) +
     theme(axis.ticks = element_blank()) +     # remove ticks
     theme(axis.text  = element_text(size = 8)) +  # font size plot labels
     theme(strip.text = element_text(size = 8)) +  # font size facet labels
@@ -158,12 +150,6 @@ validationHeatmap <- function(df,
     theme(strip.text.y = element_text(angle =  0, vjust = 0.5, hjust = 0)) +
     coord_equal() +
     theme(legend.position = "none")
-
-  # create small gap to "World" data by creating white outline
-  # -> in some cases this creates an area where tooltips do not work, disabled
-  #if("World" %in% d$region) {
-    #p <- p + geom_vline(xintercept = 1.5, linewidth = 0.6, color = "white")
-  #}
 
   if (interactive) {
     # create interactive element

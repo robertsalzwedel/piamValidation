@@ -1,11 +1,13 @@
+#' import IAM data for validation
+#'
 #' @importFrom dplyr filter select mutate %>%
 #' @importFrom readxl read_excel excel_sheets
 #' @importFrom utils read.csv2
-
-# scenarioPath: one or multiple paths to .mif or .csv file(s) containing
-#               scenario data in IAM format
+#'
+#' @param scenarioPath one or multiple paths to .mif, .csv, .rds or .xlsx file(s)
+#'        or a data.frame containing scenario data in IAM format
 importScenarioData <- function(scenarioPath) {
-  data <- remind2::deletePlus(quitte::as.quitte(scenarioPath, na.rm = TRUE)) %>%
+  data <- quitte::as.quitte(scenarioPath, na.rm = TRUE) %>%
     filter(period >= 1990)
 
   # change ordering of factors, global elements first
@@ -16,10 +18,14 @@ importScenarioData <- function(scenarioPath) {
   return(data)
 }
 
-
-# get a validation config file either from "inst/config" (.csv) or by providing
-# a full path (.csv or .xlsx) or a tibble with the necessary columns
-# see README or vignette for rules on how to fill the config
+#' import a config shipped with the package
+#'
+#' get a validation config file either from "inst/config" (.csv) or by providing
+#' a full path (.csv or .xlsx) or a tibble with the necessary columns
+#' see README or vignette for rules on how to fill the config
+#' @param config name of validation config from "inst/config"
+#'
+#' @export
 getConfig <- function(config) {
   # config can be a data object...
   if (tibble::is_tibble(config)) {
@@ -45,8 +51,9 @@ getConfig <- function(config) {
         )
       cfg <- filter(cfg, ! grepl("^#", cfg[[1]]))
     } else {
+      # only support ";" as separator for config as "," might be used in cells
       cfg <- tibble::as_tibble(
-        read.csv2(path, na.strings = "", comment.char = "#"))
+        read.csv2(path, na.strings = c("", "NA"), comment.char = "#"))
     }
     message("loading config file: ", path, "\n")
 
@@ -75,16 +82,24 @@ getConfig <- function(config) {
     mutate(max_red = ifelse(grepl("%", max_red),
                             as.numeric(sub("%", "", max_red)) / 100,
                             max_red))
+
+  # convert thresholds to numeric
+  cfg <- cfg %>%
+    mutate(min_red = as.numeric(min_red),
+           min_yel = as.numeric(min_yel),
+           max_yel = as.numeric(max_yel),
+           max_red = as.numeric(max_red)
+           )
   return(cfg)
 }
 
 # fill empty and NA threshold columns with Infinity for easier evaluation
 fillInf <- function(cfg) {
   cfg <- cfg %>%
-    mutate(min_red = as.numeric(ifelse(is.na(min_red) | min_red == "NA", -Inf, min_red)),
-           min_yel = as.numeric(ifelse(is.na(min_yel) | min_yel == "NA", -Inf, min_yel)),
-           max_yel = as.numeric(ifelse(is.na(max_yel) | max_yel == "NA",  Inf, max_yel)),
-           max_red = as.numeric(ifelse(is.na(max_red) | max_red == "NA",  Inf, max_red))
+    mutate(min_red = ifelse(is.na(min_red) | min_red == "NA", -Inf, min_red),
+           min_yel = ifelse(is.na(min_yel) | min_yel == "NA", -Inf, min_yel),
+           max_yel = ifelse(is.na(max_yel) | max_yel == "NA",  Inf, max_yel),
+           max_red = ifelse(is.na(max_red) | max_red == "NA",  Inf, max_red)
            )
 
   return(cfg)

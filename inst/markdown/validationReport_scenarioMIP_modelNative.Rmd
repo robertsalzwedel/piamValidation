@@ -1,0 +1,631 @@
+---
+title: "piamValidation: REMIND Scenario MIP report"
+date: "`r format(Sys.Date())`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    code_folding: hide
+    toc_depth: 4
+params:
+  mif: ""
+  cfg: ""
+  extraColors: true
+  warning: false
+  message: false
+  figWidth: 8
+---
+
+```{r include=FALSE}
+# this file does all the pre-processing necessary to create validation
+# reports for all ScenarioMIP models using the respective model-native regions
+
+# the regionmappings in the first code blocks only need to be regenerated if
+# regionmapping change (in common-definitions)
+
+library(piamValidation)
+library(knitr)
+library(dplyr)
+library(ggplot2)
+library(ggthemes)
+library(plotly)
+library(madrat)
+library(piamInterfaces)
+library(quitte)
+library(stringr)
+library(tidyr)
+knitr::opts_chunk$set(
+  echo = FALSE,
+  error = TRUE,
+  message = params$message,
+  warning = params$warning
+)
+# ensure that the working directory is the project root
+knitr::opts_knit$set(root.dir = rprojroot::find_rstudio_root_file())
+
+# versions
+snapshot_date <- "2026-04-24"
+historical_date <- "2025-10-14"
+thresholds_date <- "2025-10-14"
+config_date <- "2026-04-28"
+
+proj_dir <- "C:/Users/pascalwe"
+
+data_dir <- paste0(proj_dir, "/Data/scenario_mip/ModelNative/")
+
+models <- c("AIM30",
+            "COFFEE16",
+            "GCAM8",
+            "IMAGE34",
+            "MESSAGEix-GLOBIOM-GAINS21-R12",
+            "REMIND-MAgPIE35-411",
+            "WITCH60")
+```
+
+## Preparations for Model-Native Validation
+
+**Versions**
+
+Snapshots: `r snapshot_date`
+
+Historical Data: `r historical_date`
+
+Thresholds: `r thresholds_date`
+
+Validation Configs: `r config_date`
+
+
+## Model-Native Regionmappings
+
+### AllReg
+
+```{r}
+# Create MN regionmappings so that they can be used in madrat framework
+# Regional mapping data, all models from common-definitions repo
+allReg <- readxl::read_xlsx(
+  paste0(proj_dir, "/Code/scenarioMIP/validationByModel/common-definitions-template_2026-06-04.xlsx"),
+  sheet = "region") %>%
+  filter(!is.na(countries)) %>%
+  mutate(countries = gsub('\"|\\]|\\[|', "", countries)) %>%
+  mutate(countries = str_split(countries, ",")) %>%
+  tidyr::unnest(countries) %>%
+  # delete leading whitespaces only
+  mutate(countries = gsub("^\\s*", "", countries)) %>%
+  mutate(CountryCode = madrat::toolCountry2isocode(countries))
+
+# problems: "\u00c5land Islands", "Ascension and Tristan da Cunha", "Bonaire", 
+# "C\u00f4te d'Ivoire", "Cura\u00e7ao", "R\u00e9union", "Saint Barth\u00e9lemy", 
+# "Sint Eustatius and Saba", "Vatican"
+allReg[allReg$countries == "\\u00c5land Islands", "CountryCode"] <- "ALA"
+allReg[allReg$countries == "Bonaire", "CountryCode"] <- "BES"
+allReg[allReg$countries == "C\\u00f4te d'Ivoire", "CountryCode"] <- "CIV"
+allReg[allReg$countries == "Cura\\u00e7ao", "CountryCode"] <- "CUW"
+allReg[allReg$countries == "R\\u00e9union", "CountryCode"] <- "REU"
+allReg[allReg$countries == "Saint Barth\\u00e9lemy", "CountryCode"] <- "BLM"
+allReg[allReg$countries == "Vatican", "CountryCode"] <- "VAT"
+# part of Bonaire, BES -> remove (just 5 regions include this)
+allReg <- allReg[!(allReg$countries == "Sint Eustatius and Saba"), ]
+# part of Saint Helena, SHN -> remove (just 5 regions include this)
+allReg <- allReg[!(allReg$countries == "Ascension and Tristan da Cunha"), ]
+
+allReg <- allReg[c("CountryCode", "region")]
+
+# madrat regions
+madReg <- getRegions(toolCountryFill(new.magpie("DEU", 1994, "bla", 0), 1))
+
+# which model regions are not madrat regions?
+allReg[!allReg$CountryCode %in% madReg, ]
+# -> only Kosovo, remove
+allReg <- allReg[allReg$CountryCode != "KOS", ]
+```
+
+
+### R10
+```{r}
+model <- "R10"
+mapMod <- allReg %>%
+  filter(grepl(model, region))
+
+# which madrat regions are not a model region?
+madReg[!(madReg %in% mapMod$CountryCode)]
+# "AIA" "ALA" "AND" "ASM" "ATA" "ATF" "BES" "BLM" "BMU" "BVT" "CCK" "CXR" "CYM" "DMA" "FLK" "FRO" "GGY" "GIB" "GRL" "HMD"
+# "IMN" "IOT" "JEY" "LIE" "MAF" "MCO" "MNP" "MSR" "NFK" "PCN" "SGS" "SHN" "SJM" "SMR" "SPM" "TCA" "TKL" "UMI" "VAT" "VGB"
+# "WLF"
+mapMod <- rbind(mapMod,
+                data.frame(CountryCode = madReg[!(madReg %in% mapMod$CountryCode)],
+                           region = rep("Other (R10)", 41))
+                )
+
+mapMod <- rename(mapMod, RegionCode = region)
+
+write.csv2(mapMod,
+           paste0("regionmapping", gsub("\\.| ", "", model), ".csv"),
+           quote = FALSE, row.names = FALSE)
+
+# manually copy new regionmappings to input-data/mappings/regional
+```
+
+
+
+
+
+
+### AIM 3.0
+```{r}
+model <- "AIM 3.0"
+mapMod <- allReg %>%
+  filter(grepl(model, region))
+
+# which madrat regions are not a model region?
+madReg[!(madReg %in% mapMod$CountryCode)]
+# "ALA" "ATA" "BLM" "GGY" "IMN" "JEY" "MAF"
+mapMod <- rbind(mapMod,
+                c("ALA", "AIM 3.0|EU & UK"), # Finland
+                c("ATA", "AIM 3.0|Rest of Latin America"),  # Antarctica
+                c("BLM", "AIM 3.0|EU & UK"), # France
+                c("GGY", "AIM 3.0|EU & UK"), # UK
+                c("IMN", "AIM 3.0|EU & UK"), # UK
+                c("JEY", "AIM 3.0|EU & UK"), # UK
+                c("MAF", "AIM 3.0|EU & UK")) # France
+
+
+# before writing, remove model name and version number as madrat can't handle "."
+mapMod$region <- gsub(model, "", mapMod$region)
+mapMod$region <- gsub("\\|", "", mapMod$region)
+mapMod$region <- gsub(",", "", mapMod$region)
+mapMod <- rename(mapMod, RegionCode = region)
+
+write.csv2(mapMod,
+           paste0("regionmapping", gsub("\\.| ", "", model), ".csv"),
+           quote = FALSE, row.names = FALSE)
+
+# manually copy new regionmappings to input-data/mappings/regional
+```
+
+### COFFEE 1.6
+```{r}
+model <- "COFFEE 1.6"
+mapMod <- allReg %>%
+  filter(grepl(model, region))
+
+# which madrat regions are not a model region?
+madReg[!(madReg %in% mapMod$CountryCode)]
+# -> not a single one
+
+# before writing, remove model name and version number as madrat can't handle "."
+mapMod$region <- gsub(model, "", mapMod$region)
+mapMod$region <- gsub("\\|", "", mapMod$region)
+mapMod$region <- gsub(",", "", mapMod$region)
+mapMod <- rename(mapMod, RegionCode = region)
+
+write.csv2(mapMod, 
+           paste0("regionmapping", gsub("\\.| ", "", model), ".csv"), 
+           quote = FALSE, row.names = FALSE)
+
+# manually copy new regionmappings to input-data/mappings/regional
+```
+
+### GCAM 8.2
+```{r}
+model <- "GCAM 8.2"
+mapMod <- allReg %>%
+  filter(grepl(model, region))
+
+# which madrat regions are not a model region?
+madReg[!(madReg %in% mapMod$CountryCode)]
+# "ALA" "ATA" "ATF" "BLM" "BVT" "HMD" "IOT" "SGS" "UMI"
+mapMod <- rbind(mapMod,
+                c("ALA", "GCAM 8.2|EU-15"), # Finland
+                c("ATA", "GCAM 8.2|South America_Southern"),  # Antarctica
+                c("ATF", "GCAM 8.2|EU-15"), # France
+                c("BLM", "GCAM 8.2|EU-15"), # France
+                c("BVT", "GCAM 8.2|European Free Trade Association"), # Norway
+                c("HMD", "GCAM 8.2|Australia_NZ"), # Australia
+                c("IOT", "GCAM 8.2|EU-15"), # UK
+                c("SGS", "GCAM 8.2|EU-15"), # UK
+                c("UMI", "GCAM 8.2|USA")) # USA
+
+
+# before writing, remove model name and version number as madrat can't handle "."
+mapMod$region <- gsub(model, "", mapMod$region)
+mapMod$region <- gsub("\\|", "", mapMod$region)
+mapMod$region <- gsub(",", "", mapMod$region)
+mapMod <- rename(mapMod, RegionCode = region)
+
+write.csv2(mapMod, 
+           paste0("regionmapping", gsub("\\.| ", "", model), ".csv"), 
+           quote = FALSE, row.names = FALSE)
+
+# manually copy new regionmappings to input-data/mappings/regional
+```
+
+### IMAGE 3.4
+```{r}
+model <- "IMAGE 3.4"
+mapMod <- allReg %>%
+  filter(grepl(model, region))
+
+# which madrat regions are not a model region?
+madReg[!(madReg %in% mapMod$CountryCode)]
+# "ATA" "ATF" "BLM" "BVT" "HMD" "IOT" "SGS" "SJM" "UMI"
+mapMod <- rbind(mapMod,
+                c("ATA", "IMAGE 3.4|Rest of South America"),  # Antarctica
+                c("ATF", "IMAGE 3.4|Western Europe"), # France
+                c("BLM", "IMAGE 3.4|Western Europe"), # France
+                c("BVT", "IMAGE 3.4|Western Europe"), # Norway
+                c("HMD", "IMAGE 3.4|Oceania"), # Australia
+                c("IOT", "IMAGE 3.4|Western Europe"), # UK
+                c("SGS", "IMAGE 3.4|Western Europe"), # UK
+                c("SJM", "IMAGE 3.4|Western Europe"), # Norway
+                c("UMI", "IMAGE 3.4|United States")) # USA
+
+# before writing, remove model name and version number as madrat can't handle "."
+mapMod$region <- gsub(model, "", mapMod$region)
+mapMod$region <- gsub("\\|", "", mapMod$region)
+mapMod$region <- gsub(",", "", mapMod$region)
+mapMod <- rename(mapMod, RegionCode = region)
+
+write.csv2(mapMod, 
+           paste0("regionmapping", gsub("\\.| ", "", model), ".csv"), 
+           quote = FALSE, row.names = FALSE)
+
+# manually copy new regionmappings to input-data/mappings/regional
+```
+
+
+### MESSAGEix-GLOBIOM-GAINS 2.1-R12
+```{r}
+model <- "MESSAGEix-GLOBIOM-GAINS 2.1-R12"
+mapMod <- allReg %>%
+  filter(grepl(model, region))
+
+# which madrat regions are not a model region?
+madReg[!(madReg %in% mapMod$CountryCode)]
+# "ATA" "ATF" "BVT" "SXM"
+mapMod <- rbind(mapMod,
+                c("ATA", "MESSAGEix-GLOBIOM-GAINS 2.1-R12|Other Pacific Asia"),  # Antarctica
+                c("ATF", "MESSAGEix-GLOBIOM-GAINS 2.1-R12|Western Europe"), # France
+                c("BVT", "MESSAGEix-GLOBIOM-GAINS 2.1-R12|Western Europe"), # Norway
+                c("SXM", "MESSAGEix-GLOBIOM-GAINS 2.1-R12|Western Europe")) # Netherlands
+
+# before writing, remove model name and version number as madrat can't handle "."
+mapMod$region <- gsub(model, "", mapMod$region)
+mapMod$region <- gsub("\\|", "", mapMod$region)
+mapMod$region <- gsub(",", "", mapMod$region)
+mapMod <- rename(mapMod, RegionCode = region)
+
+write.csv2(mapMod, 
+           paste0("regionmapping", gsub("\\.| ", "", model), ".csv"), 
+           quote = FALSE, row.names = FALSE)
+
+# manually copy new regionmappings to input-data/mappings/regional
+```
+
+
+### REMIND
+```{r}
+model <- "REMIND-MAgPIE 3.6-4.14"
+mapMod <- allReg %>%
+  filter(grepl(model, region))
+
+# for some reasons there are duplicates
+mapMod <- mapMod[!duplicated(mapMod),]
+
+# which madrat regions are not a model region?
+madReg[!(madReg %in% mapMod$CountryCode)]
+# -> not a single one as it should be
+
+# before writing, remove model name and version number as madrat can't handle "."
+mapMod$region <- gsub(model, "", mapMod$region)
+mapMod$region <- gsub("\\|", "", mapMod$region)
+mapMod$region <- gsub(",", "", mapMod$region)
+mapMod <- rename(mapMod, RegionCode = region)
+
+write.csv2(mapMod,
+           paste0("regionmapping", gsub("\\.| ", "", model), ".csv"),
+           quote = FALSE, row.names = FALSE)
+
+# manually copy new regionmappings to input-data/mappings/regional
+```
+
+
+### WITCH 6.0
+```{r}
+model <- "WITCH 6.0"
+mapMod <- allReg %>%
+  filter(grepl(model, region)) %>%
+  filter(!grepl("EU28", region))
+
+# which madrat regions are not a model region?
+madReg[!(madReg %in% mapMod$CountryCode)]
+# -> not a single one
+
+# before writing, remove model name and version number as madrat can't handle "."
+mapMod$region <- gsub(model, "", mapMod$region)
+mapMod$region <- gsub("\\|", "", mapMod$region)
+mapMod$region <- gsub(",", "", mapMod$region) 
+mapMod <- rename(mapMod, RegionCode = region)
+
+write.csv2(mapMod, 
+           paste0("regionmapping", gsub("\\.| ", "", model), ".csv"), 
+           quote = FALSE, row.names = FALSE)
+
+# manually copy new regionmappings to input-data/mappings/regional
+```
+
+
+
+## Model-Native Threshold mifs
+
+```{r, message = FALSE, warning = TRUE}
+# for some reason doesn't work here, run in mrremind mn-historical.R
+library(madrat)
+library(mrremind)
+library(mrcommons)
+library(mrvalidation)
+library(edgeTransport)
+
+# model mapping
+mappings <- list.files(paste0(proj_dir,
+                              "/Data/scenario_mip/ModelNative/regionmappings/04.06.2026"))
+
+for (map in mappings) {
+  setConfig(regionmapping = map, forcecache = "GDP")
+  fullTHRESHOLDS()
+}
+
+# -> was run 22.04.2025
+# -> rerun 30.04.2025 without "," in region names and REMIND not being called "H12"
+```
+
+## Model-Native Historical mifs
+
+```{r, message = FALSE, warning = TRUE}
+# run on cluster: user/code/scenarioMIP/pre-processing
+#
+# -> was run 22.04.2025
+# -> rerun 30.04.2025 without "," in region names and REMIND not being called "H12"
+#
+# regions are missing model-information prefix and use REMIND variable names
+```
+
+## Validation Configs
+
+```{r, message = FALSE, warning = TRUE}
+# automatically append model-specific threshold.mif data to general config
+cfg_base <- piamValidation::getConfig("scenarioMIP_mn_general")
+
+# first
+# - remove "+" from variable mapping
+# - translate to scenarioMIP variables
+# - remove 2020 thresholds
+models <- c("AIM30",
+            "COFFEE16",
+            "GCAM71",
+            "IMAGE34",
+            "MESSAGEix-GLOBIOM-GAINS21-R12",
+            "REMIND-MAgPIE35-410",
+            "WITCH60")
+for (model in models) {
+  var_map <- piamInterfaces::getMapping(project = "ScenarioMIP") %>%
+    mutate(piam_variable = piamutils::deletePlus(.data$piam_variable))
+  var_map <- data.frame(sm_var = var_map$variable, 
+                        variable = var_map$piam_variable,
+                        sm_unit = var_map$unit,
+                        unit = var_map$piam_unit)
+  
+  cfg_model <- read.csv(
+    paste0(data_dir, "thresholds/thresholds_", model, "_", thresholds_date, ".mif")) %>%
+    filter(period != 2020) %>%
+  # in this case just a renaming/translation 
+  # -> can't use piamInterfaces for this as data object doesn't follow standards
+  # -> careful if other variables are added as conversion could be necessary
+    merge(var_map, by = c("variable", "unit")) %>%
+    mutate(variable = sm_var,
+           unit = sm_unit) %>%
+    select(-sm_var, -sm_unit, -model) %>%
+    # add additional columns
+    mutate(metric = "absolute",
+           critical = "yes",
+           period = as.character(period))
+  
+  cfg <- bind_rows(cfg_base, cfg_model) %>%
+    # workaround for format problems when writing and reading
+      mutate(min_red = as.character(min_red),
+             min_yel = as.character(min_yel),
+             max_yel = as.character(max_yel),
+             max_red = as.character(max_red))
+  
+  # remove EV related rows for models that don't report it
+  if (model %in% c("AIM30", "COFFEE16", "IMAGE34", "MESSAGEix-GLOBIOM-GAINS21-R12")) {
+    cfg <- cfg %>% 
+      filter(!grepl("Battery-Electric", variable))
+  }
+  
+  # remove CCS related rows for models that don't report it
+  if (model %in% c("COFFEE16")) {
+    cfg <- cfg %>% 
+      filter(!grepl("Carbon Capture|Geological Storage", variable))
+  }
+  
+  # remove Capacity related rows for models that don't report it
+  if (model %in% c("COFFEE16")) {
+    cfg <- cfg %>% 
+      filter(!grepl("Capacity", variable))
+  }
+  
+  write.csv2(cfg, 
+             file = paste0("validationConfig_scenarioMIP_", model, "_", config_date, ".csv"),
+             row.names = FALSE, quote = F)
+}
+```
+
+
+## Export Scenario Data
+
+```{r, message = FALSE, warning = TRUE}
+# export data object for all models containing only the variables needed in cfg
+data_files <- list.files(paste0(data_dir, "scenarios"), full.names = TRUE)
+data_files <- data_files[grepl(snapshot_date, data_files)]
+
+# get an example config used for filtering
+# model <- models[1]
+#cfg <- getConfig(paste0("validationConfig_", model, "_", thresholds_date, ".csv"))
+cfg <- getConfig("scenarioMIP_REMIND-MAgPIE35-411")
+
+scen_data_all <- data.frame()
+for (file in data_files) {
+  # only read in variables used in config
+  scen_data <- quitte::read.snapshot(file, 
+                                     list(variable = unique(cfg$variable)))
+  scen_data_all <- rbind(scen_data_all, scen_data)
+}
+
+# filter for explicit model-native regions by looking for "|" separator + World
+scen_data_all <- scen_data_all %>%
+  filter(grepl("\\||World", region))
+
+# remove model name from region and commas
+scen_data_all$region <- gsub(".*\\|", "", scen_data_all$region)
+scen_data_all$region <- gsub(",", "", scen_data_all$region)
+
+scen_data_all <- scen_data_all[!scen_data_all$value == 0, ]
+scen_data_all <- scen_data_all %>%
+  filter(period %in% seq(2005, 2100, 5))
+
+# Corrections from Gitlab Notebook, 14.01.2026
+### Switch "Very Low" and "Low Overshoot" for WITCH 6.0
+df <- scen_data_all %>%
+  mutate(scenario = case_when(
+    model == "WITCH 6.0" ~ str_replace_all(
+      scenario,
+      c(
+        "Very Low Emissions" = "TEMP_PLACEHOLDER",
+        "Low Overshoot" = "Very Low Emissions",
+        "TEMP_PLACEHOLDER" = "Low Overshoot"
+      )
+    ),
+    TRUE ~ scenario
+  ))
+### Rename "SSP5 - Medium-Low_a" to "SSP5 - High-Low Emissions"
+df <- df %>%
+  mutate(scenario = case_when(
+    model == "WITCH 6.0" & scenario == "SSP5 - Medium-Low Emissions_a" ~ "SSP5 - High-Low Emissions",
+    TRUE ~ scenario
+  ))
+## Manual renaming of scenarios for AIM submission
+### Switch "SSP2 - Low Overshoot" and "SSP2 - Low Overshoot_a" for AIM 3.0 
+### to ensure that "SSP2 - Low Overshoot" is the marker scenario
+df <- df %>%
+  mutate(scenario = case_when(
+    model == "AIM 3.0" ~ case_when(
+      scenario == "SSP2 - Low Overshoot" ~ "SSP2 - Low Overshoot_a",
+      scenario == "SSP2 - Low Overshoot_a" ~ "SSP2 - Low Overshoot",
+      TRUE ~ scenario
+    ),
+    TRUE ~ scenario
+  ))
+
+## Remove specific scenarios
+### For all models
+removeScenarios <- c(
+  "SSP2 - Medium Overshoot"
+)
+df <- df %>% filter(!(scenario %in% removeScenarios))
+
+# export
+saveRDS(df,
+        file = paste0("scenario_all_", snapshot_date, ".rds"))
+```
+## Export Historical Data
+
+```{r, message = FALSE, warning = TRUE}
+# export historical for all models
+# first
+# - translate to scenarioMIP variables (using piamInterfaces now)
+# - add back model name to regions
+# (takes a bit to run)
+data_files <- list.files(paste0(data_dir, "historical"), full.names = TRUE)
+data_files <- data_files[grepl(historical_date, data_files)]
+models <- c("AIM30",
+            "COFFEE16",
+            "GCAM82",
+            "IMAGE34",
+            "MESSAGEix-GLOBIOM-GAINS21-R12",
+            "REMIND-MAgPIE36-414",
+            "WITCH60")
+
+hist_data_all <- data.frame()
+for (model in models) {
+  file <- data_files[grepl(model, data_files)]
+  hist_data <- piamInterfaces::convertHistoricalData(file, "ScenarioMIP") %>%
+    mutate(region = paste0(!!model, "|", region))
+  hist_data_extra <- piamInterfaces::convertHistoricalData(file, "ScenarioMIP_historical") %>%
+    mutate(region = paste0(!!model, "|", region))
+  
+  # WORKAROUND: add EV data manually, as it currently cannot be mapped with piamInterfaces
+  hist_data_EV <- quitte::as.quitte(file) %>%
+    filter(variable %in% c("Stock|Transport|Car|Electric", 
+                           "Sales|Transport|Car|Electric"))
+  variables_EV <- c(
+    "Stock|Transport|Car|Electric" = "Stocks|Transportation|Light-Duty Vehicle|Battery-Electric",
+    "Sales|Transport|Car|Electric" = "Sales|Transportation|Light-Duty Vehicle|Battery-Electric")
+  units_EV <- c("Million vehicles" = "million")
+
+  hist_data_EV <- quitte::revalue.levels(hist_data_EV, variable = variables_EV)
+  hist_data_EV <- quitte::revalue.levels(hist_data_EV, unit = units_EV)
+  
+  hist_data <- rbind(hist_data, hist_data_extra, hist_data_EV)
+  saveRDS(hist_data, paste0(file, "_translated.mif"))
+}
+
+# all models should have the same "World" values in historical.mif
+# rename to just "World" and remove duplicates
+hist_data_all <- hist_data_all %>%
+  mutate(region = ifelse(grepl("World", region), "World", region)) %>%
+  filter(period >= 2005)
+
+saveRDS(hist_data_all,
+        file = paste0("historical_all_", historical_date, ".rds"))
+```
+
+## Export Historical Data NGFS
+
+```{r, message = FALSE, warning = TRUE}
+# export historical for all models
+# first
+# - translate to scenarioMIP variables (using piamInterfaces now)
+# - add back model name to regions
+# (takes a bit to run)
+models <- c(#"AIM30",
+            #"COFFEE16",
+            "GCAM82",
+            #"IMAGE34",
+            "MESSAGEix-GLOBIOM-GAINS21-R12",
+            "REMIND-MAgPIE36-414")
+            #"WITCH60")
+# data_dir <- "C:/Users/pascalwe/Data/NGFS/phase6/c2/ngfs_phase_6_snapshot_C2_29_05_2026/"
+
+hist_data_all <- data.frame()
+for (model in models) {
+  file <- paste0(data_dir, "historical_", model, "_2026-06-04.mif")
+  hist_data <- piamInterfaces::convertHistoricalData(file, "ScenarioMIP")
+  hist_data_extra <- piamInterfaces::convertHistoricalData(file, "ScenarioMIP_historical")
+  
+  # WORKAROUND: add EV data manually, as it currently cannot be mapped with piamInterfaces
+  hist_data_EV <- quitte::as.quitte(file) %>%
+    filter(variable %in% c("Stock|Transport|Car|Electric", 
+                           "Sales|Transport|Car|Electric"))
+  variables_EV <- c(
+    "Stock|Transport|Car|Electric" = "Stocks|Transportation|Light-Duty Vehicle|Battery-Electric",
+    "Sales|Transport|Car|Electric" = "Sales|Transportation|Light-Duty Vehicle|Battery-Electric")
+  units_EV <- c("Million vehicles" = "million")
+
+  hist_data_EV <- quitte::revalue.levels(hist_data_EV, variable = variables_EV)
+  hist_data_EV <- quitte::revalue.levels(hist_data_EV, unit = units_EV)
+  
+  hist_data <- rbind(hist_data, hist_data_extra, hist_data_EV)
+  saveRDS(hist_data, paste0(file, ".rds"))
+}
+
+```

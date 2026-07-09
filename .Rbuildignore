@@ -12,3 +12,8 @@
 ^vignettes/.lintr$
 ^output
 ^data
+^_pkgdown\.yml$
+^docs$
+^pkgdown$
+^\.positai$
+^\.claude$

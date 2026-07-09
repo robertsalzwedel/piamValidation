@@ -9,30 +9,47 @@
 #' @param outputDir choose a directory to save validation reports to
 #' @param extraColors if TRUE, use cyan and blue for violation of min thresholds
 #'        instead of using the same colors as for max thresholds (yel and red)
+#' @param giveSummary print a summary of input data via ``showInputSummary()``
+#'        which allows spotting data inconsistencies
 #'
 #' @importFrom piamutils getSystemFile
 #'
 #' @export
 
-validationReport <- function(dataPath, config, report = "default",
-                             outputDir = "output", extraColors = TRUE) {
+validationReport <- function(dataPath, config,
+                             report = "default",
+                             outputDir = "output",
+                             extraColors = TRUE,
+                             giveSummary = FALSE) {
 
-  # convert relative to absolute paths
-  dataPath <- normalizePath(dataPath)
+  # detect if dataPath is file path or R object
+  if (is.character(dataPath)) {
+    # convert relative to absolute paths
+    dataPath <- normalizePath(dataPath)
+  } else {
+    # use object name if possible
+    dataName <- deparse(substitute(dataPath))
+    if (length(dataName) != 1 || dataName == "") dataName <- "R_object"
+  }
 
   # user has the option to enter name of files that are shipped with package
   # or provide full paths to manually created files for config and report
-
-  if (file.exists(normalizePath(config, mustWork = F))) {
+  if (is.character(config) &&
+      file.exists(normalizePath(config, mustWork = FALSE))) {
     # full path to config given
     config <- normalizePath(config)
     configName <- "Custom"
-  } else {
+  } else if (is.character(config)) {
     # name of config file in inst/config given
     configName <- config
+  } else {
+    # config provided as R object (tibble or df)
+    configName <- "Custom"
   }
 
-  if (file.exists(normalizePath(report, mustWork = F))) {
+  # report
+  if (is.character(report) &&
+      file.exists(normalizePath(report, mustWork = FALSE))) {
     # full path to report given
     reportPath <- normalizePath(report)
     reportName <- "Custom"
@@ -41,7 +58,15 @@ validationReport <- function(dataPath, config, report = "default",
     reportPath <- piamutils::getSystemFile(
       paste0("markdown/validationReport_", report, ".Rmd"),
       package = "piamValidation")
-    reportName <- report
+    if (file.exists(reportPath)) {
+      reportName <- report
+    } else {
+      available <- list.files(system.file("markdown", package = "piamValidation"))
+      stop(paste("Report .Rmd not found!\n",
+                 "Requested:", report, "\n\n",
+                 "Available markdown files:\n",
+                 paste(available, collapse = "\n")))
+    }
   }
 
   # put rendered reports in output folder in working directory
@@ -50,8 +75,8 @@ validationReport <- function(dataPath, config, report = "default",
 
   # include chosen config and report name in output file except if it is default
   infix <- ""
-  if (configName != "default") infix <- paste0(infix, "_cfg", configName)
-  if (reportName != "default") infix <- paste0(infix, "_rep", reportName)
+  if (configName != "default") infix <- paste0(infix, "_cfg-", configName)
+  if (reportName != "default") infix <- paste0(infix, "_rep-", reportName)
 
   # create specified report for given data and config
   yamlParams <- list(mif = dataPath, cfg = config, extraColors = extraColors)
