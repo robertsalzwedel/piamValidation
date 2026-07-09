@@ -137,7 +137,7 @@ absolute;yes;Carbon Management|Storage;Mt CO2/yr;;;World;2035;;;;1300;;;;Kazlou 
 absolute;yes;Carbon Management|Storage;Mt CO2/yr;;;World;2040;;;;4300;;;;Kazlou et al. (https://www.nature.com/articles/s41558-024-02104-0)
 absolute;yes;Carbon Management|Storage;Mt CO2/yr;;;World;2050;;;;8600;;;;Grant et al.
 absolute;yes;PE|Biomass;EJ/yr;;;World;2030-2100;;;100;300;;;;Creutzig et al. 2015: https://onlinelibrary.wiley.com/doi/10.1111/gcbb.12205
-Global Mean Temperature;;;;;;;;;;;;;;;;
-absolute;yes;Temperature|Global Mean;K;;SSP2-PkBudg650-AMT, SSP2-PkBudg750-AMT, SSP2-EU21-PkBudg650-AMT, SSP2-EU21-EU-Ger-NZ-AMT;;2030-2099;;;;1.8;;;;;C2
-absolute;yes;Temperature|Global Mean;K;;SSP2-PkBudg650-AMT, SSP2-PkBudg750-AMT, SSP2-EU21-PkBudg650-AMT, SSP2-EU21-EU-Ger-NZ-AMT,SSP2-EcBudg500-AMT;;2100;;;;1.5;;;;;C2
-absolute;yes;Temperature|Global Mean;K;;SSP1-PkBudg1000-AMT, SSP2-EU21-PkBudg1000, SSP2-EU21-PkBudg1000-AMT, SSP2-PkBudg1000-AMT;;2030-2100;;;;2;;;;;C3
+Global Mean Temperature;;;;;;;;;;;;;;;
+absolute;yes;Temperature|Global Mean;K;;SSP2-PkBudg650-AMT, SSP2-PkBudg750-AMT, SSP2-EU21-PkBudg650-AMT, SSP2-EU21-EU-Ger-NZ-AMT;;2020-2099;;;;1.8;;;;C2
+absolute;yes;Temperature|Global Mean;K;;SSP2-PkBudg650-AMT, SSP2-PkBudg750-AMT, SSP2-EU21-PkBudg650-AMT, SSP2-EU21-EU-Ger-NZ-AMT,SSP2-EcBudg500-AMT;;2100;;;;1.5;;;;C2
+absolute;yes;Temperature|Global Mean;K;;SSP1-PkBudg1000-AMT, SSP2-EU21-PkBudg1000, SSP2-EU21-PkBudg1000-AMT, SSP2-PkBudg1000-AMT;;2020-2100;;;;2;;;;C3
